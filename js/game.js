@@ -27,8 +27,8 @@ function showScene(name) {
 function startGame(mode) {
   G.mode = mode;
   G.scoreL = 0; G.scoreR = 0; G.acc = 0; G.matchTime = 0;
-  G.p1.x = 180; G.p1.y = GROUND_Y; G.p1.vx = 0; G.p1.vy = 0; G.p1.onGround = true;
-  G.p2.x = 620; G.p2.y = GROUND_Y; G.p2.vx = 0; G.p2.vy = 0; G.p2.onGround = true;
+  G.p1.x = P1_HOME_X; G.p1.y = GROUND_Y; G.p1.vx = 0; G.p1.vy = 0; G.p1.onGround = true;
+  G.p2.x = P2_HOME_X; G.p2.y = GROUND_Y; G.p2.vx = 0; G.p2.vy = 0; G.p2.onGround = true;
   updateScoreText();
   updateTimerText();
   if (winText) winText.visible = false;
@@ -36,8 +36,12 @@ function startGame(mode) {
   startServe();
   clearKeys();
   clearTouchKeys();
-  if (rightLabel) rightLabel.text = (mode === 3) ? 'OPPONENT' : 'RIGHT PLAYER';
-  if (leftLabel)  leftLabel.text  = (mode === 3 && NET.role === 'guest') ? 'OPPONENT' : 'LEFT PLAYER';
+
+  if (hudP2NameText) hudP2NameText.text = (mode === 3) ? 'OPPONENT' : 'PLAYER 2';
+  if (hudP1NameText) {
+    hudP1NameText.text = (mode === 3 && NET.role === 'guest') ? 'OPPONENT' : 'PLAYER 1';
+  }
+
   showScene('game');
   syncSprites();
   updateTouchControls();
@@ -93,7 +97,7 @@ function registerTick() {
         if (G.mode === 3 && NET.role === 'host') sendState();
       }
     } else if (currentScene === 'menu') {
-      titleText.y = 118 + Math.sin(performance.now() * 0.0018) * 6;
+      titleText.y = 71 + Math.sin(performance.now() * 0.0018) * 4;
     }
 
     if (settings.showFps && fpsText) {

@@ -1,32 +1,35 @@
 ﻿'use strict';
 
-const VW = 800, VH = 600;
+const VW = 640, VH = 360;
 
-const GROUND_Y = 545;
-const NET_X    = 400;
-const NET_W    = 10;
-const NET_VW   = 18;
-const NET_TOP  = 280;
-const BLOB_R   = 42;
-const BALL_R   = 35;
+const GROUND_Y = 327;
+const NET_X    = 320;
+const NET_W    = 6;
+const NET_VW   = 11;
+const NET_TOP  = 168;
+const BLOB_R   = 25;
+const BALL_R   = 21;
 
-const BLOB_ACC   = 1.10;
-const BLOB_MAXVX = 5.5;
-const JUMP_V     = -30;
+const P1_HOME_X = 144;
+const P2_HOME_X = 496;
 
-const SERVE_Y = 300;
+const BLOB_ACC   = 0.88;
+const BLOB_MAXVX = 4.4;
+const JUMP_V     = -18;
+
+const SERVE_Y = 180;
 const POINT_DURATION = 55;
 
-const BALL_GRAV      = 0.50;
-const BLOB_GRAV      = 1.35;
+const BALL_GRAV      = 0.30;
+const BLOB_GRAV      = 0.81;
 const BLOB_BOUNCE    = 1.05;
 const NET_BOUNCE     = 0.70;
-const BALL_MAX_SPEED = 18;
+const BALL_MAX_SPEED = 12;
 
-const BLOB_KICK = 2.5;
+const BLOB_KICK = 1.8;
 
-const SERVE_VY = -10;
-const SERVE_VX = 4.5;
+const SERVE_VY = -6;
+const SERVE_VX = 3.6;
 
 const JUMP_BUFFER_FRAMES = 10;
 

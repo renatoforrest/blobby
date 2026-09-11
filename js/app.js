@@ -1,8 +1,10 @@
 ﻿'use strict';
 
+PIXI.settings.PREFER_ENV = PIXI.ENV.WEBGL;
 PIXI.settings.FAIL_IF_MAJOR_PERFORMANCE_CAVEAT = false;
 PIXI.settings.RESOLUTION = 1;
 PIXI.settings.SORTABLE_CHILDREN = false;
+PIXI.settings.ROUND_PIXELS = false;
 
 const app = new PIXI.Application({
   width: VW,
@@ -20,10 +22,11 @@ document.body.appendChild(view);
 
 function fitView() {
   const s = Math.min(window.innerWidth / VW, window.innerHeight / VH);
-  view.style.width  = (VW * s) + 'px';
-  view.style.height = (VH * s) + 'px';
-  view.style.left   = Math.round((window.innerWidth  - VW * s) * 0.5) + 'px';
-  view.style.top    = Math.round((window.innerHeight - VH * s) * 0.5) + 'px';
+  const scale = (s >= 1) ? Math.floor(s) : s;
+  view.style.width  = (VW * scale) + 'px';
+  view.style.height = (VH * scale) + 'px';
+  view.style.left   = Math.round((window.innerWidth  - VW * scale) * 0.5) + 'px';
+  view.style.top    = Math.round((window.innerHeight - VH * scale) * 0.5) + 'px';
 }
 
 window.addEventListener('resize', fitView);

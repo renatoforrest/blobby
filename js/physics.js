@@ -107,7 +107,7 @@ function collideBallNet() {
 
 function predictBallX() {
   const ball = G.ball;
-  if (ball.x < NET_X + 40 && ball.vx <= 0) return 640;
+  if (ball.x < NET_X + 25 && ball.vx <= 0) return VW - 140;
   let x = ball.x, y = ball.y, vx = ball.vx, vy = ball.vy;
   for (let i = 0; i < 90; i++) {
     vy += BALL_GRAV;
@@ -118,6 +118,24 @@ function predictBallX() {
     if (y > GROUND_Y - BALL_R) break;
   }
   return clamp(x, NET_X + NET_W / 2 + BLOB_R, VW - BLOB_R);
+}
+
+function aiThink(b, dt) {
+  aiTimer -= dt;
+  if (aiTimer <= 0) {
+    aiTimer = 8;
+    aiTargetX = predictBallX() + (Math.random() - 0.5) * 20;
+  }
+  const input = { left: false, right: false, jump: false };
+  const diff = aiTargetX - b.x;
+  if (diff < -8) input.left = true;
+  else if (diff > 8) input.right = true;
+  if (b.onGround && G.ball.x > NET_X - 18) {
+    const dx = G.ball.x - b.x;
+    const dy = G.ball.y - (b.y - BLOB_R);
+    if (dy < -12 && dy > -190 && Math.abs(dx) < 80) input.jump = true;
+  }
+  return input;
 }
 
 function aiThink(b, dt) {

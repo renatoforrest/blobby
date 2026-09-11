@@ -16,12 +16,10 @@ const G = {
   scoreR: 0,
   acc: 0,
   matchTime: 0,
-  ball: { x: 400, y: SERVE_Y, vx: 0, vy: 0 },
-  p1:   { x: 180, y: GROUND_Y, vx: 0, vy: 0, onGround: true },
-  p2:   { x: 620, y: GROUND_Y, vx: 0, vy: 0, onGround: true }
+  ball: { x: NET_X, y: SERVE_Y, vx: 0, vy: 0 },
+  p1:   { x: P1_HOME_X, y: GROUND_Y, vx: 0, vy: 0, onGround: true },
+  p2:   { x: P2_HOME_X, y: GROUND_Y, vx: 0, vy: 0, onGround: true }
 };
-
-let pendingSounds = [];
 
 function applySettings() {
   app.ticker.maxFPS = FPS_VALUES[settings.fpsIndex];
@@ -35,17 +33,17 @@ function applySettings() {
 function pad2(n) { return n < 10 ? '0' + n : '' + n; }
 
 function updateScoreText() {
-  if (typeof scoreLText === 'undefined' || !scoreLText) return;
-  scoreLText.text = pad2(G.scoreL);
-  scoreRText.text = pad2(G.scoreR);
+  if (typeof hudScoreText === 'undefined' || !hudScoreText) return;
+  hudScoreText.text = G.scoreL + ' - ' + G.scoreR;
+  if (typeof drawHudBars === 'function') drawHudBars(G.scoreL, G.scoreR);
 }
 
 function updateTimerText() {
-  if (typeof timerText === 'undefined' || !timerText) return;
+  if (typeof hudTimerText === 'undefined' || !hudTimerText) return;
   const total = Math.floor(G.matchTime);
   const m = Math.floor(total / 60);
   const s = total % 60;
-  timerText.text = pad2(m) + ':' + pad2(s);
+  hudTimerText.text = pad2(m) + ':' + pad2(s);
 }
 
 function startServe() {
@@ -59,9 +57,9 @@ function startServe() {
 }
 
 function resetRound() {
-  G.p1.x = 180; G.p1.y = GROUND_Y;
+  G.p1.x = P1_HOME_X; G.p1.y = GROUND_Y;
   G.p1.vx = 0;  G.p1.vy = 0;  G.p1.onGround = true;
-  G.p2.x = 620; G.p2.y = GROUND_Y;
+  G.p2.x = P2_HOME_X; G.p2.y = GROUND_Y;
   G.p2.vx = 0;  G.p2.vy = 0;  G.p2.onGround = true;
   startServe();
 }
@@ -70,7 +68,6 @@ function scorePoint(side) {
   if (side === 0) G.scoreL++; else G.scoreR++;
   updateScoreText();
   playPointSound();
-  if (G.mode === 3 && NET.role === 'host') pendingSounds.push('point');
   G.state = 'point';
   G.pointTimer = POINT_DURATION;
 }

@@ -38,7 +38,7 @@ function makeTouchButtonVisual(cx, cy, r, label) {
   g.beginFill(0xffffff, 0.16);
   g.drawCircle(0, 0, r);
   g.endFill();
-  g.lineStyle(2.5, 0xffffff, 0.6);
+  g.lineStyle(2, 0xffffff, 0.6);
   g.drawCircle(0, 0, r);
   c.addChild(g);
 
@@ -55,14 +55,14 @@ function buildTouchControls() {
   clearTouchKeys();
   if (!isTouch) return;
 
-  const bottomPad = 20;
+  const bottomPad = 12;
   let buttons;
 
   if (G.mode === 2) {
-    const R = 34, gap = 10;
+    const R = 20, gap = 6;
     const y = VH - R - bottomPad;
-    const p1Start = R + 14;
-    const p2End   = VW - R - 14;
+    const p1Start = R + 8;
+    const p2End   = VW - R - 8;
     buttons = [
       { cx: p1Start,                        cy: y, r: R, label: '\u25C0', key: 'p1Left' },
       { cx: p1Start + R*2 + gap,            cy: y, r: R, label: '\u25B6', key: 'p1Right' },
@@ -72,13 +72,13 @@ function buildTouchControls() {
       { cx: p2End - (R*2+gap)*2,            cy: y, r: R, label: '\u25B2', key: 'p2Jump' }
     ];
   } else {
-    const R = 58;
+    const R = 35;
     const y = VH - R - bottomPad;
-    const lx = R + 18;
+    const lx = R + 11;
     buttons = [
       { cx: lx,               cy: y, r: R, label: '\u25C0', key: 'left' },
-      { cx: lx + R*2 + 14,    cy: y, r: R, label: '\u25B6', key: 'right' },
-      { cx: VW - R - 18,      cy: y, r: R, label: '\u25B2', key: 'jump' }
+      { cx: lx + R*2 + 8,     cy: y, r: R, label: '\u25B6', key: 'right' },
+      { cx: VW - R - 11,      cy: y, r: R, label: '\u25B2', key: 'jump' }
     ];
   }
 
@@ -121,7 +121,7 @@ function findZoneAt(x, y) {
     const dx = x - z.x, dy = y - z.y;
     const extra = (z.keyName === 'jump' ||
                    z.keyName === 'p1Jump' ||
-                   z.keyName === 'p2Jump') ? 16 : 8;
+                   z.keyName === 'p2Jump') ? 10 : 5;
     const rr = z.r + extra;
     if (dx*dx + dy*dy <= rr * rr) return z;
   }
