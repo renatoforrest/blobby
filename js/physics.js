@@ -60,6 +60,7 @@ function collideBallBlob(b) {
   ball.vy += ny * BLOB_KICK;
 
   playHitSound();
+  if (G.mode === 3 && NET.role === 'host') pendingSounds.push('hit');
   return true;
 }
 

@@ -21,6 +21,8 @@ const G = {
   p2:   { x: 620, y: GROUND_Y, vx: 0, vy: 0, onGround: true }
 };
 
+let pendingSounds = [];
+
 function applySettings() {
   app.ticker.maxFPS = FPS_VALUES[settings.fpsIndex];
   winScore = WIN_VALUES[settings.winIndex];
@@ -68,6 +70,7 @@ function scorePoint(side) {
   if (side === 0) G.scoreL++; else G.scoreR++;
   updateScoreText();
   playPointSound();
+  if (G.mode === 3 && NET.role === 'host') pendingSounds.push('point');
   G.state = 'point';
   G.pointTimer = POINT_DURATION;
 }

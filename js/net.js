@@ -219,6 +219,14 @@ function applyNetState(s) {
       winText.text = s.txt; winText.visible = true; winHint.visible = true;
     }
   } else { winText.visible = false; winHint.visible = false; }
+
+  if (s.snd && s.snd.length) {
+    for (let i = 0; i < s.snd.length; i++) {
+      const kind = s.snd[i];
+      if (kind === 'hit')        playHitSound();
+      else if (kind === 'point') playPointSound();
+    }
+  } 
   syncSprites();
 }
 
@@ -232,8 +240,10 @@ function sendState() {
       p2: [G.p2.x, G.p2.y, G.p2.vx, G.p2.vy, G.p2.onGround ? 1 : 0],
       sc: [G.scoreL, G.scoreR],
       st: G.state, sv: G.serveTimer, pt: G.pointTimer, tm: G.matchTime,
-      txt: winText.visible ? winText.text : ''
+      txt: winText.visible ? winText.text : '',
+      snd: pendingSounds
     }));
+    pendingSounds = [];
   } catch (e) {}
 }
 
