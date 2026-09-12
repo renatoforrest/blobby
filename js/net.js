@@ -212,7 +212,7 @@ function applyNetState(s) {
   if (G.scoreL !== s.sc[0] || G.scoreR !== s.sc[1]) {
     G.scoreL = s.sc[0]; G.scoreR = s.sc[1]; updateScoreText();
   }
-  G.state = s.st; G.serveTimer = s.sv || 0; G.pointTimer = s.pt || 0;
+  G.state = s.st; G.pointTimer = s.pt || 0;
   G.matchTime = s.tm || 0; updateTimerText();
   if (s.txt) {
     if (!winText.visible) {
@@ -239,7 +239,7 @@ function sendState() {
       p1: [G.p1.x, G.p1.y, G.p1.vx, G.p1.vy, G.p1.onGround ? 1 : 0],
       p2: [G.p2.x, G.p2.y, G.p2.vx, G.p2.vy, G.p2.onGround ? 1 : 0],
       sc: [G.scoreL, G.scoreR],
-      st: G.state, sv: G.serveTimer, pt: G.pointTimer, tm: G.matchTime,
+      st: G.state, pt: G.pointTimer, tm: G.matchTime,
       txt: winText.visible ? winText.text : '',
       snd: pendingSounds
     }));

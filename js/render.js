@@ -1,6 +1,7 @@
 ﻿'use strict';
 
 let netSprite, p1Sprite, p2Sprite, ballShadowSprite, ballSprite;
+let ballIndicatorGfx, ballIndicatorText;
 let hudBanner, hudScoreText, hudTimerText, hudP1Bar, hudP2Bar;
 let hudP1NameText, hudP2NameText;
 let hintBar, hintText;
@@ -39,6 +40,21 @@ function buildGameSceneSprites() {
   ballSprite.width  = BALL_R * 2;
   ballSprite.height = BALL_R * 2;
   gameScene.addChild(ballSprite);
+
+    /* --- Offscreen ball indicator (rendered on the top overlay) --- */
+  ballIndicatorGfx = new PIXI.Graphics();
+  ballIndicatorGfx.visible = false;
+  overlayUI.addChild(ballIndicatorGfx);
+
+  ballIndicatorText = makeText('', 10, 0xffe066, {
+    fontFamily: 'Courier New, monospace',
+    fontWeight: 'bold',
+    stroke: '#000000',
+    strokeThickness: 3
+  });
+  ballIndicatorText.anchor.set(0.5, 0);
+  ballIndicatorText.visible = false;
+  overlayUI.addChild(ballIndicatorText);
 
   /* --- Top HUD --- */
   buildHud();
@@ -279,9 +295,32 @@ function syncSprites() {
   const maxHeight = GROUND_Y - NET_TOP;
   const heightAboveGround = clamp(GROUND_Y - G.ball.y, 0, maxHeight);
   const t = heightAboveGround / maxHeight;
-  const scale = 1.0 - t * 0.45;
+    const scale = 1.0 - t * 0.45;
   ballShadowSprite.scale.set(scale, scale * 0.55);
   ballShadowSprite.alpha = 0.85 - t * 0.45;
+
+  /* --- Offscreen ball indicator --- */
+  if (currentScene === 'game' && G.ball.y < 0) {
+    const x = clamp(G.ball.x, 12, VW - 12);
+    const dist = Math.round(-G.ball.y);
+
+    ballIndicatorGfx.visible = true;
+    ballIndicatorGfx.clear();
+    ballIndicatorGfx.beginFill(0xffe066);
+    ballIndicatorGfx.moveTo(x - 6, 0);
+    ballIndicatorGfx.lineTo(x + 6, 0);
+    ballIndicatorGfx.lineTo(x, 8);
+    ballIndicatorGfx.closePath();
+    ballIndicatorGfx.endFill();
+
+    ballIndicatorText.visible = true;
+    ballIndicatorText.text = String(dist);
+    ballIndicatorText.x = x;
+    ballIndicatorText.y = 10;
+  } else {
+    ballIndicatorGfx.visible = false;
+    ballIndicatorText.visible = false;
+  }
 }
 
 function drawHitboxes() {

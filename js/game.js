@@ -27,8 +27,9 @@ function showScene(name) {
 function startGame(mode) {
   G.mode = mode;
   G.scoreL = 0; G.scoreR = 0; G.acc = 0; G.matchTime = 0;
-  G.p1.x = P1_HOME_X; G.p1.y = GROUND_Y; G.p1.vx = 0; G.p1.vy = 0; G.p1.onGround = true;
-  G.p2.x = P2_HOME_X; G.p2.y = GROUND_Y; G.p2.vx = 0; G.p2.vy = 0; G.p2.onGround = true;
+  nextServer = 1;
+  G.p1.x = P1_HOME_X; G.p1.y = GROUND_Y; G.p1.vx = 0; G.p1.vy = 0; G.p1.onGround = true; G.p1.jumpHeld = false;
+  G.p2.x = P2_HOME_X; G.p2.y = GROUND_Y; G.p2.vx = 0; G.p2.vy = 0; G.p2.onGround = true; G.p2.jumpHeld = false;
   updateScoreText();
   updateTimerText();
   if (winText) winText.visible = false;

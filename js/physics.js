@@ -1,7 +1,6 @@
 ﻿'use strict';
 
 let aiTimer = 0;
-let aiTargetX = 620;
 
 function applyInput(b, input, dt) {
   if (input.left && !input.right)       b.vx -= BLOB_ACC * dt;
@@ -11,12 +10,21 @@ function applyInput(b, input, dt) {
   if (b.vx >  BLOB_MAXVX) b.vx =  BLOB_MAXVX;
   if (b.vx < -BLOB_MAXVX) b.vx = -BLOB_MAXVX;
 
+  let jumped = false;
+
   if (input.jump && b.onGround) {
     b.vy = JUMP_V;
     b.onGround = false;
-    return true;
+    b.jumpHeld = true;
+    jumped = true;
   }
-  return false;
+
+  if (!input.jump && b.jumpHeld) {
+    if (b.vy < 0) b.vy *= JUMP_CUT_FACTOR;
+    b.jumpHeld = false;
+  }
+
+  return jumped;
 }
 
 function integrateBlob(b, dt, minX, maxX) {
@@ -52,15 +60,28 @@ function collideBallBlob(b) {
   ball.y = by + ny * minDist;
 
   const vn = ball.vx * nx + ball.vy * ny;
-  if (vn < 0) {
+  const isRealHit = (vn < 0);
+
+  if (isRealHit) {
     ball.vx -= (1 + BLOB_BOUNCE) * vn * nx;
     ball.vy -= (1 + BLOB_BOUNCE) * vn * ny;
   }
   ball.vx += nx * BLOB_KICK;
   ball.vy += ny * BLOB_KICK;
 
-  playHitSound();
-  if (G.mode === 3 && NET.role === 'host') pendingSounds.push('hit');
+  const bn = b.vx * nx + b.vy * ny;
+  if (bn > 0) {
+    ball.vx += nx * bn * BLOB_MOMENTUM;
+    ball.vy += ny * bn * BLOB_MOMENTUM;
+  }
+
+  if (isRealHit || G.state === 'serve') {
+    playHitSound();
+    if (G.mode === 3 && NET.role === 'host') pendingSounds.push('hit');
+    if (b === G.p1) touchesP1++;
+    else if (b === G.p2) touchesP2++;
+  }
+
   return true;
 }
 
@@ -105,54 +126,152 @@ function collideBallNet() {
   }
 }
 
-function predictBallX() {
+/* =========================================================
+   AI
+   ========================================================= */
+
+/* Time (in frames) until the ball's y reaches targetY. Infinity
+   if it never will. */
+function ballTimeToY(targetY) {
   const ball = G.ball;
-  if (ball.x < NET_X + 25 && ball.vx <= 0) return VW - 140;
-  let x = ball.x, y = ball.y, vx = ball.vx, vy = ball.vy;
-  for (let i = 0; i < 90; i++) {
-    vy += BALL_GRAV;
-    x += vx; y += vy;
-    if (x < BALL_R)      { x = BALL_R;      vx = -vx * 0.85; }
-    if (x > VW - BALL_R) { x = VW - BALL_R; vx = -vx * 0.85; }
-    if (x < NET_X && ball.x > NET_X) break;
-    if (y > GROUND_Y - BALL_R) break;
-  }
-  return clamp(x, NET_X + NET_W / 2 + BLOB_R, VW - BLOB_R);
+  const dy   = targetY - ball.y;
+  const disc = ball.vy * ball.vy + 2 * BALL_GRAV * dy;
+  if (disc < 0) return Infinity;
+  const sq = Math.sqrt(disc);
+  const t1 = (-ball.vy + sq) / BALL_GRAV;
+  const t2 = (-ball.vy - sq) / BALL_GRAV;
+  let t = Infinity;
+  if (t1 >= 0) t = Math.min(t, t1);
+  if (t2 >= 0) t = Math.min(t, t2);
+  return t;
 }
+
+/* Ball's x at a future frame, accounting for wall bounces. */
+function ballXAtTime(t) {
+  let x  = G.ball.x;
+  let vx = G.ball.vx;
+  const steps = Math.ceil(t);
+  if (steps <= 0) return x;
+  const dtStep = t / steps;
+  for (let i = 0; i < steps; i++) {
+    x += vx * dtStep;
+    if (x < BALL_R)      { x = BALL_R;      vx = Math.abs(vx); }
+    if (x > VW - BALL_R) { x = VW - BALL_R; vx = -Math.abs(vx); }
+  }
+  return x;
+}
+
+let aiJumpCooldown = 0;
 
 function aiThink(b, dt) {
   aiTimer -= dt;
-  if (aiTimer <= 0) {
-    aiTimer = 8;
-    aiTargetX = predictBallX() + (Math.random() - 0.5) * 20;
-  }
-  const input = { left: false, right: false, jump: false };
-  const diff = aiTargetX - b.x;
-  if (diff < -8) input.left = true;
-  else if (diff > 8) input.right = true;
-  if (b.onGround && G.ball.x > NET_X - 18) {
-    const dx = G.ball.x - b.x;
-    const dy = G.ball.y - (b.y - BLOB_R);
-    if (dy < -12 && dy > -190 && Math.abs(dx) < 80) input.jump = true;
-  }
-  return input;
-}
+  aiJumpCooldown -= dt;
 
-function aiThink(b, dt) {
-  aiTimer -= dt;
-  if (aiTimer <= 0) {
-    aiTimer = 8;
-    aiTargetX = predictBallX() + (Math.random() - 0.5) * 34;
-  }
   const input = { left: false, right: false, jump: false };
-  const diff = aiTargetX - b.x;
-  if (diff < -12) input.left = true;
-  else if (diff > 12) input.right = true;
-  if (b.onGround && G.ball.x > NET_X - 30) {
-    const dx = G.ball.x - b.x;
-    const dy = G.ball.y - (b.y - BLOB_R);
-    if (dy < -18 && dy > -320 && Math.abs(dx) < 130) input.jump = true;
+
+  /* =========================================================
+     1. HUMAN IS SERVING — hold position near home
+     ========================================================= */
+  if (G.state === 'serve' && G.ball.x < NET_X) {
+    const diff = P2_HOME_X - b.x;
+    if (diff >  8) input.right = true;
+    else if (diff < -8) input.left = true;
+    return input;
   }
+
+  /* =========================================================
+     2. AI IS SERVING — stand next to ball, jump
+     ========================================================= */
+  if (G.state === 'serve' && G.ball.x >= NET_X) {
+    if (!b.onGround) {
+      input.jump = true;
+      const dx = G.ball.x - b.x;
+      if (dx < -3) input.left = true;
+      else if (dx > 3) input.right = true;
+      return input;
+    }
+    const targetX = clamp(G.ball.x + 15, NET_X + 40, VW - BLOB_R - 4);
+    const diff = targetX - b.x;
+    if (diff >  2) input.right = true;
+    else if (diff < -2) input.left = true;
+    if (Math.abs(diff) < 8 && aiJumpCooldown <= 0) {
+      input.jump = true;
+      aiJumpCooldown = 30;
+    }
+    return input;
+  }
+
+  /* =========================================================
+     3. BALL ON OPPONENT'S SIDE, MOVING AWAY — retreat home
+     ========================================================= */
+  if (G.ball.x < NET_X && G.ball.vx <= 0.5) {
+    const diff = P2_HOME_X - b.x;
+    if (diff >  8) input.right = true;
+    else if (diff < -8) input.left = true;
+    return input;
+  }
+
+  /* =========================================================
+     4. BALL IS ON OUR SIDE (or crossing over) — intercept
+     ========================================================= */
+
+  /* Y at the blob's bottom when at jump peak. Add a small margin
+     so the ball hits the blob's body rather than its very tip. */
+  const jumpY = GROUND_Y - JUMP_HEIGHT + 30;
+  const headY = GROUND_Y - 2 * BLOB_R - BALL_R;
+
+  let targetX = null;
+  let targetT = 0;
+  let useJump = false;
+
+  const tJump = ballTimeToY(jumpY);
+  if (isFinite(tJump) && tJump > 0) {
+    const xJump = ballXAtTime(tJump);
+    if (xJump > NET_X + 20) {
+      targetX = xJump;
+      targetT = tJump;
+      useJump = true;
+    }
+  }
+
+  if (targetX === null) {
+    const tHead = ballTimeToY(headY);
+    if (isFinite(tHead) && tHead > 0) {
+      const xHead = ballXAtTime(tHead);
+      if (xHead > NET_X + 10) {
+        targetX = xHead;
+        targetT = tHead;
+        useJump = false;
+      }
+    }
+  }
+
+  if (targetX === null) {
+    const diff = P2_HOME_X - b.x;
+    if (diff >  8) input.right = true;
+    else if (diff < -8) input.left = true;
+    return input;
+  }
+
+  const clampedTargetX = clamp(targetX, NET_X + 30, VW - BLOB_R - 8);
+  const diff = clampedTargetX - b.x;
+  if (diff >  4) input.right = true;
+  else if (diff < -4) input.left = true;
+
+  if (useJump && b.onGround && aiJumpCooldown <= 0) {
+    const framesToPeak = 27;
+    const distToTarget = Math.abs(targetX - b.x);
+    const travelTime   = distToTarget / BLOB_MAXVX;
+    const canReach     = travelTime < targetT + 2;
+    const inWindow     = targetT <= framesToPeak + 3 &&
+                         targetT >= framesToPeak - 5;
+
+    if (canReach && inWindow) {
+      input.jump = true;
+      aiJumpCooldown = 55;
+    }
+  }
+
   return input;
 }
 
@@ -189,8 +308,6 @@ function step(dt) {
     const hit1 = collideBallBlob(G.p1);
     const hit2 = collideBallBlob(G.p2);
     if (hit1 || hit2) {
-      ball.vy = SERVE_VY;
-      ball.vx = (ball.x < NET_X) ? SERVE_VX : -SERVE_VX;
       G.state = 'play';
     }
     return;
@@ -244,6 +361,16 @@ function step(dt) {
     const k = BALL_MAX_SPEED / sp;
     ball.vx *= k; ball.vy *= k;
   }
+
+  const side = (ball.x < NET_X) ? 1 : 2;
+  if (lastBallSide !== 0 && side !== lastBallSide) {
+    touchesP1 = 0;
+    touchesP2 = 0;
+  }
+  lastBallSide = side;
+
+  if (touchesP1 > 3) { scorePoint(1); return; }
+  if (touchesP2 > 3) { scorePoint(0); return; }
 
   if (ball.y + BALL_R >= GROUND_Y) {
     ball.y = GROUND_Y - BALL_R;
