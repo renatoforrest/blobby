@@ -33,12 +33,15 @@ const G = {
 function applySettings() {
   app.ticker.maxFPS = FPS_VALUES[settings.fpsIndex];
   winScore = WIN_VALUES[settings.winIndex];
-  if (typeof fpsText !== 'undefined' && fpsText) fpsText.visible = settings.showFps;
+
+  if (typeof fpsBox !== 'undefined' && fpsBox) {
+    fpsBox.visible = settings.showFps;
+  }
+  if (typeof netStatsBox !== 'undefined' && netStatsBox) {
+    netStatsBox.visible = settings.showNetStats;
+  }
   if (typeof hitboxGraphics !== 'undefined' && hitboxGraphics) {
     hitboxGraphics.visible = settings.showHitboxes;
-  }
-  if (typeof netStatsText !== 'undefined' && netStatsText) {
-    netStatsText.visible = settings.showNetStats;
   }
 }
 
