@@ -1,27 +1,13 @@
 'use strict';
 
-/* Rollback netcode.
- *
- * Frame model: both peers run a 60Hz sim stepped from wall-clock time
- * relative to rb.startWallTime. Frame N is "Nth frame since match start".
- * Input packets carry the sender's frame number.
- *
- * Prediction: when simulating frame F the remote input for F may not have
- * arrived. We use the most recent remote input seen. When the real input
- * for F does arrive and F < currentFrame, we restore the snapshot taken
- * before F and resim F..currentFrame.
- *
- * Events: step() returns per-frame event names ('hit', 'point') instead
- * of playing sounds. During resim we compare against the first pass and
- * play only differences.
- */
-
-const ROLLBACK_CAP = 8;
+const ROLLBACK_CAP = 8;      // max frames we'll resim on one input arrival
+const RB_LOOKAHEAD = 3;      // guest runs this many frames ahead of newest host input
 const FRAME_MS = 1000 / 60;
 
 const rb = {
   active: false,
   frame: 0,
+  hostFrame: 0,
   startWallTime: 0,
   localInputs: new Map(),
   remoteInputs: new Map(),
@@ -33,6 +19,7 @@ const rb = {
 function rbInit() {
   rb.active = true;
   rb.frame = 0;
+  rb.hostFrame = 0;
   rb.startWallTime = performance.now();
   rb.localInputs.clear();
   rb.remoteInputs.clear();
@@ -51,17 +38,27 @@ function rbTeardown() {
 
 function rbTick() {
   if (!rb.active) return;
-  const elapsed = performance.now() - rb.startWallTime;
-  const targetFrame = Math.floor(elapsed / FRAME_MS);
 
-  let guard = 0;
-  while (rb.frame < targetFrame && guard < 6) {
-    rbAdvanceOneFrame();
-    guard++;
+  if (NET.role === 'host') {
+    // Host drives its own frame clock from wall time.
+    const targetFrame = Math.floor((performance.now() - rb.startWallTime) / FRAME_MS);
+    let guard = 0;
+    while (rb.frame < targetFrame && guard < 6) {
+      rbAdvanceOneFrame();
+      guard++;
+    }
+    // Tab was hidden / hard stall: skip ahead without simulating every frame.
+    if (targetFrame - rb.frame > 6) rb.frame = targetFrame;
+  } else {
+    // Guest paces to hostFrame + lookahead. Stalls if host packets stop
+    // arriving; that's the cost of host-owns-the-clock.
+    const target = rb.hostFrame + RB_LOOKAHEAD;
+    let guard = 0;
+    while (rb.frame < target && guard < 6) {
+      rbAdvanceOneFrame();
+      guard++;
+    }
   }
-  // Tab was hidden / hard stall: jump forward without simulating every
-  // missed frame. The next real input will roll back from wherever we are.
-  if (targetFrame - rb.frame > 6) rb.frame = targetFrame;
 
   syncSprites();
   syncUiFromState();
@@ -101,15 +98,18 @@ function rbAdvanceOneFrame() {
 }
 
 function rbTrim() {
-  const cutoff = rb.frame - 120; // keep 2 s of history
+  const cutoff = rb.frame - 120;
   if (cutoff <= 0) return;
   for (const map of [rb.localInputs, rb.remoteInputs, rb.snapshots, rb.eventsByFrame]) {
     for (const k of map.keys()) if (k < cutoff) map.delete(k);
   }
 }
 
-function rbOnRemoteInput(frame, input) {
+function rbOnRemoteInput(frame, input, fromHost) {
   if (!rb.active) return;
+
+  if (fromHost && frame > rb.hostFrame) rb.hostFrame = frame;
+
   rb.remoteInputs.set(frame, input);
   rb.lastRemoteInput = input;
   if (frame >= rb.frame) return;

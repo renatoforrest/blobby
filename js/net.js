@@ -196,7 +196,11 @@ function handleNetMessage(msg) {
   if (msg.t === 'go') {
     rbInit();
   } else if (msg.t === 'i') {
-    rbOnRemoteInput(msg.f, { left: !!msg.l, right: !!msg.r, jump: !!msg.j });
+    rbOnRemoteInput(
+      msg.f,
+      { left: !!msg.l, right: !!msg.r, jump: !!msg.j },
+      NET.role === 'guest'   // fromHost: only true when we're the guest
+    );
   }
 }
 
