@@ -9,6 +9,38 @@ const NET = {
   pendingCandidates: []
 };
 
+const NETSTATS = {
+  rtt: 0,
+  rollbackAvg: 0,
+  rollbackPeak: 0,
+  ahead: 0,
+  _pingSent: 0,
+  _pingTimer: null
+};
+
+function netStatsPing() {
+  if (!NET.dc || NET.dc.readyState !== 'open') return;
+  NETSTATS._pingSent = performance.now();
+  try { NET.dc.send(JSON.stringify({ t: 'p' })); } catch (e) {}
+}
+
+function netStatsStart() {
+  netStatsStop();
+  NETSTATS._pingTimer = setInterval(netStatsPing, 500);
+  netStatsPing();
+}
+
+function netStatsStop() {
+  if (NETSTATS._pingTimer) {
+    clearInterval(NETSTATS._pingTimer);
+    NETSTATS._pingTimer = null;
+  }
+  NETSTATS.rtt = 0;
+  NETSTATS.rollbackAvg = 0;
+  NETSTATS.rollbackPeak = 0;
+  NETSTATS.ahead = 0;
+}
+
 function connectSignaling() {
   if (SIGNAL.ws && SIGNAL.ws.readyState <= 1) return;
   let ws;
@@ -167,6 +199,7 @@ async function flushCandidates() {
 }
 
 function endPeerConnection() {
+  netStatsStop();
   if (NET.dc) { try { NET.dc.close(); } catch (e) {} NET.dc = null; }
   if (NET.pc) { try { NET.pc.close(); } catch (e) {} NET.pc = null; }
   NET.connected = false;
@@ -176,11 +209,13 @@ function endPeerConnection() {
 function setupDataChannel(dc) {
   dc.onopen = () => {
     NET.connected = true;
+    netStatsStart();
     if (currentScene === 'mp') roomStatus.text = 'Connected! Starting...';
     if (SIGNAL.inRoom) startGame(3);
   };
   dc.onclose = () => {
     NET.connected = false;
+    netStatsStop();
     rbTeardown();
     if (currentScene === 'game') showScene('menu');
   };
@@ -199,8 +234,12 @@ function handleNetMessage(msg) {
     rbOnRemoteInput(
       msg.f,
       { left: !!msg.l, right: !!msg.r, jump: !!msg.j },
-      NET.role === 'guest'   // fromHost: only true when we're the guest
+      NET.role === 'guest'
     );
+  } else if (msg.t === 'p') {
+    try { NET.dc.send(JSON.stringify({ t: 'q' })); } catch (e) {}
+  } else if (msg.t === 'q') {
+    NETSTATS.rtt = performance.now() - NETSTATS._pingSent;
   }
 }
 

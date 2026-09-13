@@ -4,14 +4,19 @@ const FPS_VALUES = [30, 60, 144, 0];
 const FPS_LABELS = ['30', '60', '144', 'OFF'];
 const WIN_VALUES = [5, 10, 15];
 
-const settings = { fpsIndex: 1, winIndex: 1, showFps: true, showHitboxes: false };
+const settings = {
+  fpsIndex: 1,
+  winIndex: 1,
+  showFps: true,
+  showHitboxes: false,
+  showNetStats: false
+};
 let winScore = WIN_VALUES[settings.winIndex];
 
-/* Serve + touch tracking */
-let nextServer   = 1;   // 1 = P1 serves next, 2 = P2 serves next
+let nextServer   = 1;
 let touchesP1    = 0;
 let touchesP2    = 0;
-let lastBallSide = 0;   // 0 = unset, 1 = left/P1 side, 2 = right/P2 side
+let lastBallSide = 0;
 
 const G = {
   mode: 1,
@@ -31,6 +36,9 @@ function applySettings() {
   if (typeof fpsText !== 'undefined' && fpsText) fpsText.visible = settings.showFps;
   if (typeof hitboxGraphics !== 'undefined' && hitboxGraphics) {
     hitboxGraphics.visible = settings.showHitboxes;
+  }
+  if (typeof netStatsText !== 'undefined' && netStatsText) {
+    netStatsText.visible = settings.showNetStats;
   }
 }
 

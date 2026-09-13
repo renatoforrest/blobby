@@ -90,9 +90,12 @@ settingsScene.addChild(makeRow(180, 'HITBOXES', ['OFF', 'ON'],
 settingsScene.addChild(makeRow(222, 'SCORE TO WIN', ['5', '10', '15'],
   () => settings.winIndex,
   () => { settings.winIndex = (settings.winIndex + 1) % WIN_VALUES.length; }));
+settingsScene.addChild(makeRow(264, 'NET STATS', ['OFF', 'ON'],
+  () => (settings.showNetStats ? 1 : 0),
+  () => { settings.showNetStats = !settings.showNetStats; }));
 
 const btnBack = makeButton('BACK', btnTex, () => showScene('menu'));
-btnBack.x = (VW - BTN_W) / 2; btnBack.y = 282;
+btnBack.x = (VW - BTN_W) / 2; btnBack.y = 306;
 settingsScene.addChild(btnBack);
 
 /* ---------- MULTIPLAYER ---------- */

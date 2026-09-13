@@ -8,6 +8,7 @@ let hintBar, hintText;
 let winText, winHint, inGameBackBtn, hitboxGraphics;
 let fullscreenBtn = null, fullscreenBtnIcon = null;
 let fpsText;
+let netStatsText;
 
 function buildGameSceneSprites() {
   /* --- Net --- */
@@ -41,7 +42,7 @@ function buildGameSceneSprites() {
   ballSprite.height = BALL_R * 2;
   gameScene.addChild(ballSprite);
 
-    /* --- Offscreen ball indicator (rendered on the top overlay) --- */
+  /* --- Offscreen ball indicator --- */
   ballIndicatorGfx = new PIXI.Graphics();
   ballIndicatorGfx.visible = false;
   overlayUI.addChild(ballIndicatorGfx);
@@ -149,18 +150,21 @@ function buildGameSceneSprites() {
   fpsText.x = 6;
   fpsText.y = VH - 28;
   overlayUI.addChild(fpsText);
+
+  /* --- Net stats --- */
+  netStatsText = makeText('NET --', 9, 0xffa060, { fontFamily: 'Consolas, monospace' });
+  netStatsText.x = 6;
+  netStatsText.y = VH - 40;
+  netStatsText.visible = false;
+  overlayUI.addChild(netStatsText);
 }
 
-/* =========================================================
-   HUD — top banner
-   ========================================================= */
 function buildHud() {
   const HUD_X = 20;
   const HUD_Y = 6;
   const HUD_W = VW - 40;
   const HUD_H = 46;
 
-  /* Banner background */
   hudBanner = new PIXI.Graphics();
   hudBanner.beginFill(0x0a0f1a, 0.92);
   hudBanner.drawRoundedRect(HUD_X, HUD_Y, HUD_W, HUD_H, 8);
@@ -169,7 +173,6 @@ function buildHud() {
   hudBanner.drawRoundedRect(HUD_X, HUD_Y, HUD_W, HUD_H, 8);
   gameScene.addChild(hudBanner);
 
-  /* Player 1 name (red) */
   hudP1NameText = makeText('PLAYER 1', 13, 0xff4a4a, {
     fontFamily: 'Courier New, monospace',
     fontWeight: 'bold',
@@ -179,7 +182,6 @@ function buildHud() {
   hudP1NameText.y = HUD_Y + 8;
   gameScene.addChild(hudP1NameText);
 
-  /* Player 2 name (blue) */
   hudP2NameText = makeText('PLAYER 2', 13, 0x4a9bff, {
     fontFamily: 'Courier New, monospace',
     fontWeight: 'bold',
@@ -190,7 +192,6 @@ function buildHud() {
   hudP2NameText.y = HUD_Y + 8;
   gameScene.addChild(hudP2NameText);
 
-  /* Small blob icons next to names */
   const iconSize = 14;
   const redIcon = new PIXI.Sprite(blobRedTex);
   redIcon.width = iconSize;
@@ -206,7 +207,6 @@ function buildHud() {
   blueIcon.y = HUD_Y + 8;
   gameScene.addChild(blueIcon);
 
-  /* Score in the center */
   hudScoreText = makeText('0 - 0', 22, 0xffffff, {
     fontFamily: 'Courier New, monospace',
     fontWeight: 'bold',
@@ -217,14 +217,12 @@ function buildHud() {
   hudScoreText.y = HUD_Y + 5;
   gameScene.addChild(hudScoreText);
 
-  /* Bars */
   hudP1Bar = new PIXI.Graphics();
   hudP2Bar = new PIXI.Graphics();
   gameScene.addChild(hudP1Bar);
   gameScene.addChild(hudP2Bar);
   drawHudBars(G.scoreL, G.scoreR);
 
-  /* Timer box below the banner */
   const tbW = 76, tbH = 22;
   const tbX = (VW - tbW) / 2;
   const tbY = HUD_Y + HUD_H + 4;
@@ -282,9 +280,6 @@ function drawHudBars(scoreL, scoreR) {
   }
 }
 
-/* =========================================================
-   Sprite sync + hitboxes
-   ========================================================= */
 function syncSprites() {
   if (!p1Sprite || !p2Sprite || !ballSprite || !ballShadowSprite) return;
   p1Sprite.x = G.p1.x; p1Sprite.y = G.p1.y - BLOB_R;
@@ -295,11 +290,10 @@ function syncSprites() {
   const maxHeight = GROUND_Y - NET_TOP;
   const heightAboveGround = clamp(GROUND_Y - G.ball.y, 0, maxHeight);
   const t = heightAboveGround / maxHeight;
-    const scale = 1.0 - t * 0.45;
+  const scale = 1.0 - t * 0.45;
   ballShadowSprite.scale.set(scale, scale * 0.55);
   ballShadowSprite.alpha = 0.85 - t * 0.45;
 
-  /* --- Offscreen ball indicator --- */
   if (currentScene === 'game' && G.ball.y < 0) {
     const x = clamp(G.ball.x, 12, VW - 12);
     const dist = Math.round(-G.ball.y);

@@ -1,7 +1,6 @@
 'use strict';
 
-const ROLLBACK_CAP = 8;      // max frames we'll resim on one input arrival
-const RB_LOOKAHEAD = 3;      // guest runs this many frames ahead of newest host input
+const RB_LOOKAHEAD = 3;
 const FRAME_MS = 1000 / 60;
 
 const rb = {
@@ -26,6 +25,9 @@ function rbInit() {
   rb.snapshots.clear();
   rb.eventsByFrame.clear();
   rb.lastRemoteInput = { left: false, right: false, jump: false };
+  NETSTATS.rollbackAvg = 0;
+  NETSTATS.rollbackPeak = 0;
+  NETSTATS.ahead = 0;
 }
 
 function rbTeardown() {
@@ -40,24 +42,22 @@ function rbTick() {
   if (!rb.active) return;
 
   if (NET.role === 'host') {
-    // Host drives its own frame clock from wall time.
     const targetFrame = Math.floor((performance.now() - rb.startWallTime) / FRAME_MS);
     let guard = 0;
-    while (rb.frame < targetFrame && guard < 6) {
+    while (rb.frame < targetFrame && guard < 240) {
       rbAdvanceOneFrame();
       guard++;
     }
-    // Tab was hidden / hard stall: skip ahead without simulating every frame.
-    if (targetFrame - rb.frame > 6) rb.frame = targetFrame;
+    if (rb.frame < targetFrame) rb.frame = targetFrame;
+    NETSTATS.ahead = 0;
   } else {
-    // Guest paces to hostFrame + lookahead. Stalls if host packets stop
-    // arriving; that's the cost of host-owns-the-clock.
     const target = rb.hostFrame + RB_LOOKAHEAD;
     let guard = 0;
-    while (rb.frame < target && guard < 6) {
+    while (rb.frame < target && guard < 240) {
       rbAdvanceOneFrame();
       guard++;
     }
+    NETSTATS.ahead = rb.frame - rb.hostFrame;
   }
 
   syncSprites();
@@ -98,7 +98,7 @@ function rbAdvanceOneFrame() {
 }
 
 function rbTrim() {
-  const cutoff = rb.frame - 120;
+  const cutoff = rb.frame - 240;
   if (cutoff <= 0) return;
   for (const map of [rb.localInputs, rb.remoteInputs, rb.snapshots, rb.eventsByFrame]) {
     for (const k of map.keys()) if (k < cutoff) map.delete(k);
@@ -112,16 +112,21 @@ function rbOnRemoteInput(frame, input, fromHost) {
 
   rb.remoteInputs.set(frame, input);
   rb.lastRemoteInput = input;
-  if (frame >= rb.frame) return;
 
-  const targetFrame = Math.max(frame, rb.frame - ROLLBACK_CAP);
-  const snap = rb.snapshots.get(targetFrame);
+  if (frame >= rb.frame) return;
+  if (frame < rb.frame - 240) return;
+
+  const depth = rb.frame - frame;
+  NETSTATS.rollbackAvg = NETSTATS.rollbackAvg * 0.9 + depth * 0.1;
+  if (depth > NETSTATS.rollbackPeak) NETSTATS.rollbackPeak = depth;
+
+  const snap = rb.snapshots.get(frame);
   if (!snap) return;
 
   restoreSim(snap);
 
   const isHost = (NET.role === 'host');
-  for (let f = targetFrame; f < rb.frame; f++) {
+  for (let f = frame; f < rb.frame; f++) {
     const local = rb.localInputs.get(f);
     if (!local) break;
     const remote = rb.remoteInputs.get(f) || rb.lastRemoteInput;

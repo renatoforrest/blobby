@@ -67,7 +67,6 @@ function startGame(mode) {
         try { NET.dc.send(JSON.stringify({ t: 'go' })); } catch (e) {}
       }
     }
-    // Guest: rbInit() runs when the 'go' message arrives.
   }
 }
 
@@ -117,6 +116,17 @@ function registerTick() {
         fpsAccum = 0;
         fpsText.text = 'FPS ' + Math.round(app.ticker.FPS);
       }
+    }
+
+    if (settings.showNetStats && netStatsText) {
+      const rtt = NETSTATS.rtt;
+      const avg = NETSTATS.rollbackAvg;
+      const pk  = NETSTATS.rollbackPeak;
+      const ah  = NETSTATS.ahead;
+      netStatsText.text =
+        'PING ' + (rtt > 0 ? Math.round(rtt) + 'ms' : '--') +
+        '  RB ' + avg.toFixed(1) + '/' + pk +
+        '  AHEAD ' + ah;
     }
   });
 }
