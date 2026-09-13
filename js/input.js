@@ -8,9 +8,6 @@ const touchKeys = {
   p2Left: false, p2Right: false, p2Jump: false
 };
 
-let jumpBufferP1 = 0;
-let jumpBufferP2 = 0;
-
 const touchZones = [];
 const activePointers = new Map();
 
@@ -23,8 +20,6 @@ function clearKeys() { for (const k in keys) keys[k] = false; }
 function clearTouchKeys() {
   for (const k in touchKeys) touchKeys[k] = false;
   activePointers.clear();
-  jumpBufferP1 = 0;
-  jumpBufferP2 = 0;
   for (const z of touchZones) {
     if (z.gfx) z.gfx.tint = 0xffffff;
   }
@@ -136,20 +131,11 @@ function setZoneVisual(keyName, on) {
   }
 }
 
-function requestJump(keyName) {
-  if (keyName !== 'jump' && keyName !== 'p1Jump' && keyName !== 'p2Jump') return;
-  if (keyName === 'p1Jump') { jumpBufferP1 = JUMP_BUFFER_FRAMES; return; }
-  if (keyName === 'p2Jump') { jumpBufferP2 = JUMP_BUFFER_FRAMES; return; }
-  if (G.mode === 3 && NET.role === 'guest') jumpBufferP2 = JUMP_BUFFER_FRAMES;
-  else                                       jumpBufferP1 = JUMP_BUFFER_FRAMES;
-}
-
 function pressZone(zone, pointerId) {
   releasePointer(pointerId);
   activePointers.set(pointerId, zone.keyName);
   touchKeys[zone.keyName] = true;
   setZoneVisual(zone.keyName, true);
-  requestJump(zone.keyName);
 }
 
 function releasePointer(pointerId) {
@@ -165,13 +151,7 @@ function releasePointer(pointerId) {
 
 window.addEventListener('keydown', (e) => {
   ensureAudio();
-  const wasDown = keys[e.code];
   keys[e.code] = true;
-
-  if (!wasDown && (e.code === 'KeyW' || e.code === 'ArrowUp')) {
-    if (G.mode === 3 && NET.role === 'guest') jumpBufferP2 = JUMP_BUFFER_FRAMES;
-    else                                       jumpBufferP1 = JUMP_BUFFER_FRAMES;
-  }
 
   if (e.code === 'Escape') {
     if (currentScene === 'game')          showScene('menu');
@@ -213,33 +193,31 @@ window.addEventListener('pointercancel', (e) => releasePointer(e.pointerId), { p
 window.addEventListener('blur', () => { clearKeys(); clearTouchKeys(); });
 
 function getP1Input() {
-  const bufJump = jumpBufferP1 > 0;
   if (G.mode === 2) {
     return {
       left:  !!keys['KeyA'] || touchKeys.p1Left,
       right: !!keys['KeyD'] || touchKeys.p1Right,
-      jump:  !!keys['KeyW'] || touchKeys.p1Jump || bufJump
+      jump:  !!keys['KeyW'] || touchKeys.p1Jump
     };
   }
   return {
     left:  !!keys['KeyA'] || touchKeys.left,
     right: !!keys['KeyD'] || touchKeys.right,
-    jump:  !!keys['KeyW'] || touchKeys.jump || bufJump
+    jump:  !!keys['KeyW'] || touchKeys.jump
   };
 }
 
 function getP2Input() {
-  const bufJump = jumpBufferP2 > 0;
   if (G.mode === 2) {
     return {
       left:  !!keys['ArrowLeft']  || touchKeys.p2Left,
       right: !!keys['ArrowRight'] || touchKeys.p2Right,
-      jump:  !!keys['ArrowUp']    || touchKeys.p2Jump || bufJump
+      jump:  !!keys['ArrowUp']    || touchKeys.p2Jump
     };
   }
   return {
     left:  !!keys['ArrowLeft']  || touchKeys.left,
     right: !!keys['ArrowRight'] || touchKeys.right,
-    jump:  !!keys['ArrowUp']    || touchKeys.jump || bufJump
+    jump:  !!keys['ArrowUp']    || touchKeys.jump
   };
 }

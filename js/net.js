@@ -6,7 +6,6 @@ const SIGNAL = {
 
 const NET = {
   pc: null, dc: null, role: null, connected: false,
-  remoteInput: { left: false, right: false, jump: false },
   pendingCandidates: []
 };
 
@@ -32,6 +31,7 @@ function connectSignaling() {
     if (SIGNAL.inRoom) {
       SIGNAL.inRoom = null;
       endPeerConnection();
+      rbTeardown();
       if (currentScene === 'mp') {
         showLobbyPanel();
         mpLobbyStatus.text = 'Connection lost. Reconnecting...';
@@ -75,6 +75,7 @@ function handleSignalingMessage(msg) {
     case 'peer-joined': startHostOffer(); break;
     case 'peer-left':
       endPeerConnection();
+      rbTeardown();
       if (SIGNAL.inRoom && SIGNAL.inRoom.role === 'host') {
         roomStatus.text = 'Opponent left. Waiting for a new one...';
       } else {
@@ -169,7 +170,6 @@ function endPeerConnection() {
   if (NET.dc) { try { NET.dc.close(); } catch (e) {} NET.dc = null; }
   if (NET.pc) { try { NET.pc.close(); } catch (e) {} NET.pc = null; }
   NET.connected = false;
-  NET.remoteInput = { left: false, right: false, jump: false };
   NET.pendingCandidates = [];
 }
 
@@ -177,10 +177,11 @@ function setupDataChannel(dc) {
   dc.onopen = () => {
     NET.connected = true;
     if (currentScene === 'mp') roomStatus.text = 'Connected! Starting...';
-    setTimeout(() => { if (SIGNAL.inRoom) startGame(3); }, 250);
+    if (SIGNAL.inRoom) startGame(3);
   };
   dc.onclose = () => {
     NET.connected = false;
+    rbTeardown();
     if (currentScene === 'game') showScene('menu');
   };
   dc.onerror = () => {};
@@ -192,59 +193,11 @@ function setupDataChannel(dc) {
 }
 
 function handleNetMessage(msg) {
-  if (msg.t === 'i') {
-    const wasJump = NET.remoteInput.jump;
-    NET.remoteInput.left  = !!msg.l;
-    NET.remoteInput.right = !!msg.r;
-    NET.remoteInput.jump  = !!msg.j;
-    if (!wasJump && NET.remoteInput.jump) {
-      jumpBufferP2 = JUMP_BUFFER_FRAMES;
-    }
-  } else if (msg.t === 's') applyNetState(msg);
-}
-
-function applyNetState(s) {
-  G.ball.x = s.b[0]; G.ball.y = s.b[1]; G.ball.vx = s.b[2]; G.ball.vy = s.b[3];
-  G.p1.x = s.p1[0]; G.p1.y = s.p1[1]; G.p1.vx = s.p1[2]; G.p1.vy = s.p1[3];
-  G.p1.onGround = !!s.p1[4];
-  G.p2.x = s.p2[0]; G.p2.y = s.p2[1]; G.p2.vx = s.p2[2]; G.p2.vy = s.p2[3];
-  G.p2.onGround = !!s.p2[4];
-  if (G.scoreL !== s.sc[0] || G.scoreR !== s.sc[1]) {
-    G.scoreL = s.sc[0]; G.scoreR = s.sc[1]; updateScoreText();
+  if (msg.t === 'go') {
+    rbInit();
+  } else if (msg.t === 'i') {
+    rbOnRemoteInput(msg.f, { left: !!msg.l, right: !!msg.r, jump: !!msg.j });
   }
-  G.state = s.st; G.pointTimer = s.pt || 0;
-  G.matchTime = s.tm || 0; updateTimerText();
-  if (s.txt) {
-    if (!winText.visible) {
-      winText.text = s.txt; winText.visible = true; winHint.visible = true;
-    }
-  } else { winText.visible = false; winHint.visible = false; }
-
-  if (s.snd && s.snd.length) {
-    for (let i = 0; i < s.snd.length; i++) {
-      const kind = s.snd[i];
-      if (kind === 'hit')        playHitSound();
-      else if (kind === 'point') playPointSound();
-    }
-  } 
-  syncSprites();
-}
-
-function sendState() {
-  if (!NET.dc || NET.dc.readyState !== 'open') return;
-  try {
-    NET.dc.send(JSON.stringify({
-      t: 's',
-      b:  [G.ball.x, G.ball.y, G.ball.vx, G.ball.vy],
-      p1: [G.p1.x, G.p1.y, G.p1.vx, G.p1.vy, G.p1.onGround ? 1 : 0],
-      p2: [G.p2.x, G.p2.y, G.p2.vx, G.p2.vy, G.p2.onGround ? 1 : 0],
-      sc: [G.scoreL, G.scoreR],
-      st: G.state, pt: G.pointTimer, tm: G.matchTime,
-      txt: winText.visible ? winText.text : '',
-      snd: pendingSounds
-    }));
-    pendingSounds = [];
-  } catch (e) {}
 }
 
 function createRoom() {
@@ -271,6 +224,7 @@ function leaveRoomAction() {
   signalSend({ t: 'leave' });
   SIGNAL.inRoom = null;
   endPeerConnection();
+  rbTeardown();
   showLobbyPanel();
   signalSend({ t: 'list' });
 }

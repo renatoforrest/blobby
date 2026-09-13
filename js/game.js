@@ -4,6 +4,8 @@ let currentScene = 'menu';
 let fpsAccum = 0;
 
 function showScene(name) {
+  if (currentScene === 'game' && name !== 'game' && G.mode === 3) rbTeardown();
+
   currentScene = name;
   menuScene.visible     = (name === 'menu');
   settingsScene.visible = (name === 'settings');
@@ -26,10 +28,19 @@ function showScene(name) {
 
 function startGame(mode) {
   G.mode = mode;
-  G.scoreL = 0; G.scoreR = 0; G.acc = 0; G.matchTime = 0;
+  G.scoreL = 0; G.scoreR = 0; G.acc = 0; G.matchTime = 0; G.winner = 0;
   nextServer = 1;
-  G.p1.x = P1_HOME_X; G.p1.y = GROUND_Y; G.p1.vx = 0; G.p1.vy = 0; G.p1.onGround = true; G.p1.jumpHeld = false;
-  G.p2.x = P2_HOME_X; G.p2.y = GROUND_Y; G.p2.vx = 0; G.p2.vy = 0; G.p2.onGround = true; G.p2.jumpHeld = false;
+  jumpBufferP1 = 0; jumpBufferP2 = 0;
+  aiTimer = 0; aiJumpCooldown = 0;
+
+  G.p1.x = P1_HOME_X; G.p1.y = GROUND_Y;
+  G.p1.vx = 0; G.p1.vy = 0;
+  G.p1.onGround = true; G.p1.jumpHeld = false; G.p1.prevJump = false;
+
+  G.p2.x = P2_HOME_X; G.p2.y = GROUND_Y;
+  G.p2.vx = 0; G.p2.vy = 0;
+  G.p2.onGround = true; G.p2.jumpHeld = false; G.p2.prevJump = false;
+
   updateScoreText();
   updateTimerText();
   if (winText) winText.visible = false;
@@ -45,7 +56,19 @@ function startGame(mode) {
 
   showScene('game');
   syncSprites();
+  syncUiFromState();
   updateTouchControls();
+
+  if (mode === 3) {
+    rbTeardown();
+    if (NET.role === 'host') {
+      rbInit();
+      if (NET.dc && NET.dc.readyState === 'open') {
+        try { NET.dc.send(JSON.stringify({ t: 'go' })); } catch (e) {}
+      }
+    }
+    // Guest: rbInit() runs when the 'go' message arrives.
+  }
 }
 
 const SIM_STEP = 1 / 60;
@@ -63,39 +86,26 @@ function registerTick() {
     }
 
     if (currentScene === 'game') {
-      if (G.mode === 3 && NET.role === 'guest') {
-        if (jumpBufferP1 > 0) jumpBufferP1 -= 1;
-        if (jumpBufferP2 > 0) jumpBufferP2 -= 1;
-
-        if (NET.dc && NET.dc.readyState === 'open') {
-          try {
-            const inp = getP2Input();
-            NET.dc.send(JSON.stringify({
-              t: 'i',
-              l: inp.left ? 1 : 0,
-              r: inp.right ? 1 : 0,
-              j: inp.jump ? 1 : 0
-            }));
-          } catch (e) {}
-        }
-        syncSprites();
-        if (settings.showHitboxes) drawHitboxes();
+      if (G.mode === 3) {
+        rbTick();
       } else {
-        if (G.state === 'play') {
-          G.matchTime += ms / 1000;
-          updateTimerText();
-        }
         G.acc += ms / 1000;
         if (G.acc > 0.1) G.acc = 0.1;
         let n = 0;
         while (G.acc >= SIM_STEP && n < 5) {
-          step(1);
+          const p1In = getP1Input();
+          const p2In = (G.mode === 2) ? getP2Input() : { left: false, right: false, jump: false };
+          const events = step(1, p1In, p2In);
+          for (let i = 0; i < events.length; i++) {
+            if (events[i] === 'hit')        playHitSound();
+            else if (events[i] === 'point') playPointSound();
+          }
           G.acc -= SIM_STEP;
           n++;
         }
         syncSprites();
+        syncUiFromState();
         if (settings.showHitboxes) drawHitboxes();
-        if (G.mode === 3 && NET.role === 'host') sendState();
       }
     } else if (currentScene === 'menu') {
       titleText.y = 71 + Math.sin(performance.now() * 0.0018) * 4;

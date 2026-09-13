@@ -7,8 +7,6 @@ const WIN_VALUES = [5, 10, 15];
 const settings = { fpsIndex: 1, winIndex: 1, showFps: true, showHitboxes: false };
 let winScore = WIN_VALUES[settings.winIndex];
 
-let pendingSounds = [];
-
 /* Serve + touch tracking */
 let nextServer   = 1;   // 1 = P1 serves next, 2 = P2 serves next
 let touchesP1    = 0;
@@ -19,13 +17,12 @@ const G = {
   mode: 1,
   state: 'serve',
   pointTimer: 0,
-  scoreL: 0,
-  scoreR: 0,
-  acc: 0,
-  matchTime: 0,
+  scoreL: 0, scoreR: 0,
+  acc: 0, matchTime: 0,
+  winner: 0,
   ball: { x: NET_X, y: SERVE_Y, vx: 0, vy: 0 },
-  p1:   { x: P1_HOME_X, y: GROUND_Y, vx: 0, vy: 0, onGround: true, jumpHeld: false },
-  p2:   { x: P2_HOME_X, y: GROUND_Y, vx: 0, vy: 0, onGround: true, jumpHeld: false }
+  p1: { x: P1_HOME_X, y: GROUND_Y, vx: 0, vy: 0, onGround: true, jumpHeld: false, prevJump: false },
+  p2: { x: P2_HOME_X, y: GROUND_Y, vx: 0, vy: 0, onGround: true, jumpHeld: false, prevJump: false }
 };
 
 function applySettings() {
@@ -73,11 +70,60 @@ function resetRound() {
   startServe();
 }
 
-function scorePoint(side) {
+function scorePoint(side, events) {
   if (side === 0) { G.scoreL++; nextServer = 1; }
   else            { G.scoreR++; nextServer = 2; }
-  updateScoreText();
-  playPointSound();
+  events.push('point');
   G.state = 'point';
   G.pointTimer = POINT_DURATION;
+}
+
+function snapshotSim() {
+  return {
+    ball: { x: G.ball.x, y: G.ball.y, vx: G.ball.vx, vy: G.ball.vy },
+    p1:   { x: G.p1.x, y: G.p1.y, vx: G.p1.vx, vy: G.p1.vy,
+            onGround: G.p1.onGround, jumpHeld: G.p1.jumpHeld, prevJump: G.p1.prevJump },
+    p2:   { x: G.p2.x, y: G.p2.y, vx: G.p2.vx, vy: G.p2.vy,
+            onGround: G.p2.onGround, jumpHeld: G.p2.jumpHeld, prevJump: G.p2.prevJump },
+    state: G.state, pointTimer: G.pointTimer,
+    scoreL: G.scoreL, scoreR: G.scoreR,
+    matchTime: G.matchTime, winner: G.winner,
+    nextServer, touchesP1, touchesP2, lastBallSide,
+    jumpBufferP1, jumpBufferP2,
+    aiTimer, aiJumpCooldown
+  };
+}
+
+function restoreSim(s) {
+  G.ball.x = s.ball.x; G.ball.y = s.ball.y;
+  G.ball.vx = s.ball.vx; G.ball.vy = s.ball.vy;
+  G.p1.x = s.p1.x; G.p1.y = s.p1.y; G.p1.vx = s.p1.vx; G.p1.vy = s.p1.vy;
+  G.p1.onGround = s.p1.onGround; G.p1.jumpHeld = s.p1.jumpHeld; G.p1.prevJump = s.p1.prevJump;
+  G.p2.x = s.p2.x; G.p2.y = s.p2.y; G.p2.vx = s.p2.vx; G.p2.vy = s.p2.vy;
+  G.p2.onGround = s.p2.onGround; G.p2.jumpHeld = s.p2.jumpHeld; G.p2.prevJump = s.p2.prevJump;
+  G.state = s.state; G.pointTimer = s.pointTimer;
+  G.scoreL = s.scoreL; G.scoreR = s.scoreR;
+  G.matchTime = s.matchTime; G.winner = s.winner;
+  nextServer = s.nextServer;
+  touchesP1 = s.touchesP1; touchesP2 = s.touchesP2;
+  lastBallSide = s.lastBallSide;
+  jumpBufferP1 = s.jumpBufferP1; jumpBufferP2 = s.jumpBufferP2;
+  aiTimer = s.aiTimer; aiJumpCooldown = s.aiJumpCooldown;
+}
+
+function syncUiFromState() {
+  updateScoreText();
+  updateTimerText();
+  if (typeof winText === 'undefined' || !winText) return;
+  if (G.state === 'over') {
+    const p1Won = (G.winner === 1);
+    winText.text = p1Won
+      ? (G.mode === 1 ? 'YOU WIN!' : 'PLAYER 1 WINS!')
+      : (G.mode === 1 ? 'CPU WINS!' : 'PLAYER 2 WINS!');
+    winText.visible = true;
+    winHint.visible = true;
+  } else {
+    winText.visible = false;
+    winHint.visible = false;
+  }
 }

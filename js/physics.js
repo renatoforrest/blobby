@@ -1,6 +1,9 @@
 ﻿'use strict';
 
 let aiTimer = 0;
+let aiJumpCooldown = 0;
+let jumpBufferP1 = 0;
+let jumpBufferP2 = 0;
 
 function applyInput(b, input, dt) {
   if (input.left && !input.right)       b.vx -= BLOB_ACC * dt;
@@ -40,7 +43,7 @@ function integrateBlob(b, dt, minX, maxX) {
   } else b.onGround = false;
 }
 
-function collideBallBlob(b) {
+function collideBallBlob(b, events) {
   const ball = G.ball;
   const bx = b.x;
   const by = b.y - BLOB_R;
@@ -76,12 +79,10 @@ function collideBallBlob(b) {
   }
 
   if (isRealHit || G.state === 'serve') {
-    playHitSound();
-    if (G.mode === 3 && NET.role === 'host') pendingSounds.push('hit');
+    events.push('hit');
     if (b === G.p1) touchesP1++;
     else if (b === G.p2) touchesP2++;
   }
-
   return true;
 }
 
@@ -160,8 +161,6 @@ function ballXAtTime(t) {
   }
   return x;
 }
-
-let aiJumpCooldown = 0;
 
 function aiThink(b, dt) {
   aiTimer -= dt;
@@ -275,44 +274,49 @@ function aiThink(b, dt) {
   return input;
 }
 
-function step(dt) {
+function step(dt, rawP1, rawP2) {
   const ball = G.ball;
-  if (G.mode === 3 && NET.role === 'guest') return;
+  const events = [];
 
-  const p1In = getP1Input();
-  const p1Jumped = applyInput(G.p1, p1In, dt);
+  // P1 — always human (AI plays P2 only)
+  if (rawP1.jump && !G.p1.prevJump) jumpBufferP1 = JUMP_BUFFER_FRAMES;
+  G.p1.prevJump = rawP1.jump;
+  const p1EffJump = rawP1.jump || jumpBufferP1 > 0;
+  const p1Jumped = applyInput(G.p1,
+    { left: rawP1.left, right: rawP1.right, jump: p1EffJump }, dt);
   if (p1Jumped) jumpBufferP1 = 0;
-  else if (jumpBufferP1 > 0) jumpBufferP1 -= 1;
+  else if (jumpBufferP1 > 0) jumpBufferP1--;
   integrateBlob(G.p1, dt, BLOB_R, NET_X - NET_W / 2 - BLOB_R);
 
+  // P2 — AI in mode 1, human otherwise
   let p2In;
-  if (G.mode === 3 && NET.role === 'host') {
-    p2In = {
-      left:  NET.remoteInput.left,
-      right: NET.remoteInput.right,
-      jump:  NET.remoteInput.jump || jumpBufferP2 > 0
-    };
-  } else if (G.mode === 1) {
+  let p2Buffered = false;
+  if (G.mode === 1) {
     p2In = aiThink(G.p2, dt);
   } else {
-    p2In = getP2Input();
+    if (rawP2.jump && !G.p2.prevJump) jumpBufferP2 = JUMP_BUFFER_FRAMES;
+    G.p2.prevJump = rawP2.jump;
+    const p2EffJump = rawP2.jump || jumpBufferP2 > 0;
+    p2In = { left: rawP2.left, right: rawP2.right, jump: p2EffJump };
+    p2Buffered = true;
   }
   const p2Jumped = applyInput(G.p2, p2In, dt);
-  if (p2Jumped) jumpBufferP2 = 0;
-  else if (jumpBufferP2 > 0) jumpBufferP2 -= 1;
+  if (p2Buffered) {
+    if (p2Jumped) jumpBufferP2 = 0;
+    else if (jumpBufferP2 > 0) jumpBufferP2--;
+  }
   integrateBlob(G.p2, dt, NET_X + NET_W / 2 + BLOB_R, VW - BLOB_R);
 
+  if (G.state === 'play') G.matchTime += dt / 60;
+
   if (G.state === 'serve') {
-    ball.vx = 0;
-    ball.vy = 0;
-    const hit1 = collideBallBlob(G.p1);
-    const hit2 = collideBallBlob(G.p2);
-    if (hit1 || hit2) {
+    ball.vx = 0; ball.vy = 0;
+    if (collideBallBlob(G.p1, events) | collideBallBlob(G.p2, events)) {
       G.state = 'play';
     }
-    return;
+    return events;
   }
-  if (G.state === 'over') return;
+  if (G.state === 'over') return events;
 
   if (G.state === 'point') {
     ball.vy += BALL_GRAV * dt;
@@ -332,25 +336,19 @@ function step(dt) {
     if (G.pointTimer <= 0) {
       if (G.scoreL >= winScore || G.scoreR >= winScore) {
         G.state = 'over';
-        const p1Won = G.scoreL >= winScore;
-        winText.text = p1Won
-          ? (G.mode === 1 ? 'YOU WIN!' : 'PLAYER 1 WINS!')
-          : (G.mode === 1 ? 'CPU WINS!' : 'PLAYER 2 WINS!');
-        winText.visible = true;
-        winHint.visible = true;
+        G.winner = (G.scoreL >= winScore) ? 1 : 2;
       } else {
         resetRound();
       }
     }
-    return;
+    return events;
   }
 
   ball.vy += BALL_GRAV * dt;
   ball.x  += ball.vx * dt;
   ball.y  += ball.vy * dt;
-
-  collideBallBlob(G.p1);
-  collideBallBlob(G.p2);
+  collideBallBlob(G.p1, events);
+  collideBallBlob(G.p2, events);
   collideBallNet();
 
   if (ball.x - BALL_R < 0) { ball.x = BALL_R; ball.vx = Math.abs(ball.vx) * 0.85; }
@@ -363,17 +361,15 @@ function step(dt) {
   }
 
   const side = (ball.x < NET_X) ? 1 : 2;
-  if (lastBallSide !== 0 && side !== lastBallSide) {
-    touchesP1 = 0;
-    touchesP2 = 0;
-  }
+  if (lastBallSide !== 0 && side !== lastBallSide) { touchesP1 = 0; touchesP2 = 0; }
   lastBallSide = side;
 
-  if (touchesP1 > 3) { scorePoint(1); return; }
-  if (touchesP2 > 3) { scorePoint(0); return; }
+  if (touchesP1 > 3) { scorePoint(1, events); return events; }
+  if (touchesP2 > 3) { scorePoint(0, events); return events; }
 
   if (ball.y + BALL_R >= GROUND_Y) {
     ball.y = GROUND_Y - BALL_R;
-    scorePoint(ball.x < NET_X ? 1 : 0);
+    scorePoint(ball.x < NET_X ? 1 : 0, events);
   }
+  return events;
 }
