@@ -40,6 +40,7 @@ function rbTeardown() {
 
 function rbTick() {
   if (!rb.active) return;
+  const t0 = performance.now();
 
   if (NET.role === 'host') {
     const targetFrame = Math.floor((performance.now() - rb.startWallTime) / FRAME_MS);
@@ -63,6 +64,10 @@ function rbTick() {
   syncSprites();
   syncUiFromState();
   if (settings.showHitboxes) drawHitboxes();
+
+  const dtms = performance.now() - t0;
+  if (dtms > 8) console.warn('rbTick', dtms.toFixed(2) + 'ms',
+                             'frame=' + rb.frame);
 }
 
 function rbAdvanceOneFrame() {
@@ -107,6 +112,7 @@ function rbTrim() {
 
 function rbOnRemoteInput(frame, input, fromHost) {
   if (!rb.active) return;
+  const t0 = performance.now();
 
   if (fromHost && frame > rb.hostFrame) rb.hostFrame = frame;
 
@@ -137,6 +143,11 @@ function rbOnRemoteInput(frame, input, fromHost) {
     rb.snapshots.set(f + 1, snapshotSim());
   }
   syncUiFromState();
+
+  const dtms = performance.now() - t0;
+  if (dtms > 4) console.warn('rbOnRemoteInput', dtms.toFixed(2) + 'ms',
+                             'frame=' + frame, 'depth=' + depth,
+                             'cur=' + rb.frame);
 }
 
 function rbPlayEvents(events) {
