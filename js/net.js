@@ -148,7 +148,10 @@ async function startHostOffer() {
   const pc = createPeerConnection();
   NET.pc = pc;
   NET.role = 'host';
-  const dc = pc.createDataChannel('game', { ordered: true });
+  const dc = pc.createDataChannel('game', {
+    ordered: false,
+    maxRetransmits: 0
+  });
   NET.dc = dc;
   setupDataChannel(dc);
   try {
@@ -231,11 +234,7 @@ function handleNetMessage(msg) {
   if (msg.t === 'go') {
     rbInit();
   } else if (msg.t === 'i') {
-    rbOnRemoteInput(
-      msg.f,
-      { left: !!msg.l, right: !!msg.r, jump: !!msg.j },
-      NET.role === 'guest'
-    );
+    rbOnRemoteInputBatch(msg.a, NET.role === 'guest');
   } else if (msg.t === 'p') {
     try { NET.dc.send(JSON.stringify({ t: 'q' })); } catch (e) {}
   } else if (msg.t === 'q') {

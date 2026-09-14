@@ -2,6 +2,7 @@
 
 const RB_LOOKAHEAD = 3;
 const FRAME_MS = 1000 / 60;
+const RB_INPUT_REDUNDANCY = 5;
 
 const rb = {
   active: false,
@@ -15,11 +16,14 @@ const rb = {
   lastRemoteInput: { left: false, right: false, jump: false }
 };
 
+let rbLastTickWall = 0;
+
 function rbInit() {
   rb.active = true;
   rb.frame = 0;
   rb.hostFrame = 0;
   rb.startWallTime = performance.now();
+  rbLastTickWall = rb.startWallTime;
   rb.localInputs.clear();
   rb.remoteInputs.clear();
   rb.snapshots.clear();
@@ -40,10 +44,14 @@ function rbTeardown() {
 
 function rbTick() {
   if (!rb.active) return;
-  const t0 = performance.now();
+
+  const now = performance.now();
+  const gapSinceLastTick = now - rbLastTickWall;
+  rbLastTickWall = now;
+  const t0 = now;
 
   if (NET.role === 'host') {
-    const targetFrame = Math.floor((performance.now() - rb.startWallTime) / FRAME_MS);
+    const targetFrame = Math.floor((now - rb.startWallTime) / FRAME_MS);
     let guard = 0;
     while (rb.frame < targetFrame && guard < 240) {
       rbAdvanceOneFrame();
@@ -66,8 +74,11 @@ function rbTick() {
   if (settings.showHitboxes) drawHitboxes();
 
   const dtms = performance.now() - t0;
-  if (dtms > 8) console.warn('rbTick', dtms.toFixed(2) + 'ms',
-                             'frame=' + rb.frame);
+  if (dtms > 8 || gapSinceLastTick > 33) {
+    console.warn('rbTick', dtms.toFixed(2) + 'ms',
+                 'gap=' + gapSinceLastTick.toFixed(2) + 'ms',
+                 'frame=' + rb.frame);
+  }
 }
 
 function rbAdvanceOneFrame() {
@@ -88,14 +99,15 @@ function rbAdvanceOneFrame() {
   rbPlayEvents(events);
 
   if (NET.dc && NET.dc.readyState === 'open') {
-    try {
-      NET.dc.send(JSON.stringify({
-        t: 'i', f,
-        l: localInput.left  ? 1 : 0,
-        r: localInput.right ? 1 : 0,
-        j: localInput.jump  ? 1 : 0
-      }));
-    } catch (e) {}
+    const frames = [];
+    for (let k = 0; k < RB_INPUT_REDUNDANCY; k++) {
+      const fr = f - k;
+      if (fr < 0) break;
+      const inp = rb.localInputs.get(fr);
+      if (!inp) break;
+      frames.push([fr, inp.left ? 1 : 0, inp.right ? 1 : 0, inp.jump ? 1 : 0]);
+    }
+    try { NET.dc.send(JSON.stringify({ t: 'i', a: frames })); } catch (e) {}
   }
 
   rb.frame++;
@@ -110,29 +122,38 @@ function rbTrim() {
   }
 }
 
-function rbOnRemoteInput(frame, input, fromHost) {
+function rbOnRemoteInputBatch(entries, fromHost) {
   if (!rb.active) return;
   const t0 = performance.now();
 
-  if (fromHost && frame > rb.hostFrame) rb.hostFrame = frame;
+  let oldest = Infinity;
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const fr = e[0];
+    const inp = { left: !!e[1], right: !!e[2], jump: !!e[3] };
+    if (fromHost && fr > rb.hostFrame) rb.hostFrame = fr;
+    if (!rb.remoteInputs.has(fr)) {
+      rb.remoteInputs.set(fr, inp);
+      if (fr < oldest) oldest = fr;
+    }
+    rb.lastRemoteInput = inp;
+  }
 
-  rb.remoteInputs.set(frame, input);
-  rb.lastRemoteInput = input;
+  if (oldest === Infinity) return;
+  if (oldest >= rb.frame) return;
+  if (oldest < rb.frame - 240) return;
 
-  if (frame >= rb.frame) return;
-  if (frame < rb.frame - 240) return;
+  const snap = rb.snapshots.get(oldest);
+  if (!snap) return;
 
-  const depth = rb.frame - frame;
+  const depth = rb.frame - oldest;
   NETSTATS.rollbackAvg = NETSTATS.rollbackAvg * 0.9 + depth * 0.1;
   if (depth > NETSTATS.rollbackPeak) NETSTATS.rollbackPeak = depth;
-
-  const snap = rb.snapshots.get(frame);
-  if (!snap) return;
 
   restoreSim(snap);
 
   const isHost = (NET.role === 'host');
-  for (let f = frame; f < rb.frame; f++) {
+  for (let f = oldest; f < rb.frame; f++) {
     const local = rb.localInputs.get(f);
     if (!local) break;
     const remote = rb.remoteInputs.get(f) || rb.lastRemoteInput;
@@ -145,9 +166,11 @@ function rbOnRemoteInput(frame, input, fromHost) {
   syncUiFromState();
 
   const dtms = performance.now() - t0;
-  if (dtms > 4) console.warn('rbOnRemoteInput', dtms.toFixed(2) + 'ms',
-                             'frame=' + frame, 'depth=' + depth,
-                             'cur=' + rb.frame);
+  if (dtms > 4) {
+    console.warn('rbOnRemoteInputBatch', dtms.toFixed(2) + 'ms',
+                 'oldest=' + oldest, 'depth=' + depth,
+                 'cur=' + rb.frame);
+  }
 }
 
 function rbPlayEvents(events) {
