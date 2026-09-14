@@ -2,6 +2,7 @@
 
 let currentScene = 'menu';
 let fpsAccum = 0;
+let lastTickWall = 0;
 
 function showScene(name) {
   if (currentScene === 'game' && name !== 'game' && G.mode === 3) rbTeardown();
@@ -73,7 +74,13 @@ function startGame(mode) {
 const SIM_STEP = 1 / 60;
 
 function registerTick() {
+  lastTickWall = performance.now();
+
   app.ticker.add(() => {
+    const now = performance.now();
+    const gapSinceLastTick = now - lastTickWall;
+    lastTickWall = now;
+
     const ms = app.ticker.deltaMS;
     const dt = ms / 16.67;
 
@@ -127,6 +134,11 @@ function registerTick() {
         'PING ' + (rtt > 0 ? Math.round(rtt) + 'ms' : '--') +
         '  RB ' + avg.toFixed(1) + '/' + pk +
         '  AHEAD ' + ah;
+    }
+
+    if (gapSinceLastTick > 33) {
+      console.warn('ticker gap', gapSinceLastTick.toFixed(1) + 'ms',
+                   'scene=' + currentScene, 'mode=' + G.mode);
     }
   });
 }
