@@ -1,11 +1,11 @@
 ﻿'use strict';
 
-const FPS_VALUES = [30, 60, 144, 0];
-const FPS_LABELS = ['30', '60', '144', 'OFF'];
+const FPS_VALUES = [30, 60, 144, 240];
+const FPS_LABELS = ['30', '60', '144', 'MAX'];
 const WIN_VALUES = [5, 10, 15];
 
 const settings = {
-  fpsIndex: 1,
+  fpsIndex: 3,
   winIndex: 1,
   showFps: true,
   showHitboxes: false,
